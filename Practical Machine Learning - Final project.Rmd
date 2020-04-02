@@ -1,0 +1,122 @@
+---
+title: "Practical Machine Learning - Final project"
+output: html_document
+---
+
+## Task
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+Course Project Prediction Quiz Portion
+Apply your machine learning algorithm to the 20 test cases available in the test data above and submit your predictions in appropriate format to the Course Project Prediction Quiz for automated grading.
+
+## Row Data source
+
+The training data for this project are available here:  <br>  
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv  <br>  
+The test data are available here:  <br>  
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv  <br>  
+
+## Project strategy
+To figure out the best prediction model we will follow up these parts:  <br>  
+        1. Getting and Cleaning the dataset <br>  
+        2. Train and test 3 different prediction models <br>  
+        3. Using the best model for the prediction quiz data   <br>  
+        
+# 1. Getting and Cleaning the dataset
+```{r}
+library(caret)
+library(rpart)
+
+training <- read.csv("~/Coursera/20200324_Practical_Machine_Learning/pml-training.csv")
+quiztesting <- read.csv("~/Coursera/20200324_Practical_Machine_Learning/pml-testing.csv")
+
+##Remove NAs
+
+rmdata <- apply(X = training, MARGIN = 2, FUN = is.na)
+rmdata2 <- apply(X = rmdata, MARGIN = 2, FUN = mean)
+
+training <- training[, rmdata2 < 0.9]
+
+##Remove data which variance is nearly 0
+
+nzv <- nearZeroVar(x = training)
+training <- training[, -nzv]
+
+##Remove first 7 columns (no relevance for prediction model)
+
+training <- training[, -c(1:7)]
+
+##Remove data with low correlation coefficient
+
+cordata <- cor(training[, -52])
+strongcordata <- findCorrelation(x = cordata, cutoff = 0.7)
+training2 <- training[, c(strongcordata, 52)]
+
+##Create training and testing dataset
+set.seed(1)
+trainindex <- createDataPartition(y = training2$classe, p = 0.6, list = FALSE)
+trainset <- training2[trainindex, ]
+testset <- training2[-trainindex, ]
+```
+
+# 2. Train and test 3 different prediction models
+
+## 2.1 Random Forest Model
+
+```{r}
+##Train Random Forest Model
+rfcontrol <- trainControl(method = "cv", number = 3, verboseIter = FALSE)
+rfmodel <- train(classe ~ . , data = trainset, method = "rf", trControl = rfcontrol, ntree = 50, verbose = FALSE)
+
+##Test RF Model
+rfpredict <- predict(object = rfmodel, newdata = testset)
+rfconfmatrix <- confusionMatrix(data = rfpredict, reference = testset$classe)
+print(rfconfmatrix)
+```
+
+## 2.2 Generalized Boosted Model
+
+```{r}
+set.seed(2)
+##Train Generalized Boosted Model
+gbmcontrol <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+gbmmodel <- train(classe ~ . , data = trainset, method = "gbm", trControl = gbmcontrol, verbose = FALSE)
+
+##Test Generalized Boosted Model
+gbmpredict <- predict(object = gbmmodel, newdata = testset)
+gbmconfmatrix <- confusionMatrix(data = gbmpredict, reference = testset$classe)
+print(gbmconfmatrix)
+```
+
+# 2.3 Decision Tree
+
+```{r}
+set.seed(3)
+##Train Decision Tree Model
+dcmodel <- rpart(classe ~ . , data = trainset, method = "class")
+
+##Test Decision Tree Model
+dcpredict <- predict(object = dcmodel, newdata = testset, type = "class")
+dcconfmatrix <- confusionMatrix(data = dcpredict, reference = testset$classe)
+print(dcconfmatrix)
+```
+
+# 3. Conclusion and prediction of quiz data
+
+```{r}
+##Compare the accuracy of the different models
+
+##RF Model
+rfconfmatrix$overall["Accuracy"]
+##GBM Model
+gbmconfmatrix$overall["Accuracy"]
+##DC Model
+dcconfmatrix$overall["Accuracy"]
+```
+
+The accuracy of the Random Forest Model shows the highest accuracy thus it is used for the quiz data in the following:
+
+```{r}
+quizpredict <- predict(object = rfmodel, newdata = quiztesting)
+print(quizpredict)
+```
